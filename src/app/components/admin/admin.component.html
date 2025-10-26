@@ -1,0 +1,89 @@
+<div class="p-4 md:p-8">
+  <h1 class="text-3xl font-bold mb-6">Admin Dashboard</h1>
+
+  <mat-tab-group animationDuration="0ms">
+    <!-- Employee Progress Tab -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="mr-2">groups</mat-icon>
+        <span>Employee Progress</span>
+      </ng-template>
+      <div class="p-4">
+        <mat-form-field class="w-full">
+          <mat-label>Filter Employees</mat-label>
+          <input matInput (keyup)="applyFilter($event)" placeholder="Ex. John Doe" #input />
+        </mat-form-field>
+
+        <div class="mat-elevation-z8 overflow-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="bg-gray-100">
+                <th class="p-4 text-left font-semibold cursor-pointer" (click)="sortData('name')">
+                  <div class="flex items-center">
+                    Name
+                    <span class="w-6 h-6 ml-1 flex items-center justify-center">
+                      @if (sortColumn() === 'name') { @if (sortDirection() === 'asc') {
+                      <mat-icon>arrow_upward</mat-icon>
+                      } @else {
+                      <mat-icon>arrow_downward</mat-icon>
+                      } } @else {
+                      <mat-icon class="text-gray-400">unfold_more</mat-icon>
+                      }
+                    </span>
+                  </div>
+                </th>
+                <th class="p-4 text-left font-semibold">Position</th>
+                <th class="p-4 text-left font-semibold">Progress</th>
+                <th class="p-4 text-left font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (employee of filteredEmployees(); track employee.id) {
+              <tr class="border-b hover:bg-gray-50">
+                <td class="p-4">{{ employee.firstName }} {{ employee.lastName }}</td>
+                <td class="p-4">{{ employee.position.title }}</td>
+                <td class="p-4">
+                  <div class="flex items-center">
+                    <div class="w-24">
+                      <mat-progress-bar
+                        mode="determinate"
+                        [value]="employee.completionPercentage"
+                      ></mat-progress-bar>
+                    </div>
+                    <span class="ml-3 text-sm font-medium"
+                      >{{ employee.completionPercentage.toFixed(0) }}%</span
+                    >
+                  </div>
+                </td>
+                <td class="p-4">
+                  <a mat-button color="primary" [routerLink]="['/employee', employee.id]"
+                    >View Details</a
+                  >
+                </td>
+              </tr>
+              } @empty {
+              <tr>
+                <td colspan="4" class="p-8 text-center text-gray-500">No employees found.</td>
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </mat-tab>
+
+    <!-- Course Management Tab -->
+    <mat-tab>
+      <ng-template mat-tab-label>
+        <mat-icon class="mr-2">assignment</mat-icon>
+        <span>Course Management</span>
+      </ng-template>
+      <app-course-management
+        [courses]="courses()"
+        [positions]="positions()"
+        [employees]="employees()"
+      >
+      </app-course-management>
+    </mat-tab>
+  </mat-tab-group>
+</div>
