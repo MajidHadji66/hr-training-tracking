@@ -54,6 +54,12 @@ export class CourseManagementComponent {
     employees: [[] as number[]],
   });
 
+  getEmployeePosition(employeeId: number): Position | undefined {
+    const employee = this.employees().find((e) => e.id === employeeId);
+    if (!employee) return undefined;
+    return this.positions().find((p) => p.id === employee.positionId);
+  }
+
   selectedCourse = computed(() => {
     const id = this.selectedCourseId();
     if (!id) return null;
