@@ -18,7 +18,6 @@
             }
           </mat-select>
         </mat-form-field>
-
         <!-- Employee Assignments -->
         <mat-form-field class="w-full">
           <mat-label>Assign to Specific Employees</mat-label>
@@ -42,6 +41,14 @@
           @if (isSaving()) {
           <mat-spinner [diameter]="20" class="inline-block mr-2"></mat-spinner>
           Saving... } @else { Save Assignments }
+        </button>
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="onCourseSelectionChange(null)"
+          class="ml-2"
+        >
+          Back to Course Selection
         </button>
       </mat-card-actions>
     </mat-card>

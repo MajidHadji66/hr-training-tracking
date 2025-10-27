@@ -56,7 +56,6 @@ export class CourseManagementComponent {
 
   selectedCourse = computed(() => {
     const id = this.selectedCourseId();
-    console.log('🚀 ~ CourseManagementComponent ~ id:', id);
     if (!id) return null;
     return this.courses().find((c) => c.id === id) ?? null;
   });
