@@ -1,7 +1,5 @@
 # Data Dictionary
 
-Source: Interpreted from the provided ERD (image 1).  
-Note: The diagram does not explicitly show nullability or indexes beyond primary/foreign keys. Where appropriate, recommendations are noted.
 
 ## Entities
 
@@ -137,13 +135,4 @@ Keys and Indexes:
 
 ---
 
-## Assumptions and Recommendations
 
-- Nullability is not explicit in the diagram. Above “No (recommended)” indicates typical constraints; adjust per business rules.
-- Consider adding UNIQUE(employees.email).
-- Consider ON DELETE/UPDATE behavior:
-  - positions.departmentId → departments(id): RESTRICT or SET NULL (per policy).
-  - employees.positionId → positions(id): RESTRICT (to avoid orphan employees) or SET NULL if positions can be vacated.
-  - positioncourses and employeetraining FKs: ON DELETE CASCADE to clean up dependent rows when parent rows are removed.
-- Consider adding created_at/updated_at audit columns where needed.
-- Data types and lengths (e.g., VARCHAR sizes) are taken from the diagram or inferred. Adjust to your standards if different.
