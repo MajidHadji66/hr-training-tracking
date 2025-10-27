@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
+const { createLocalPool } = require('./db');
 
 const app = express();
 const port = 3000;
@@ -13,199 +14,278 @@ app.use(express.json());
 // --- Helper Functions (Business Logic) ---
 
 function getRequiredCourseIdsForEmployee(employeeId) {
-    const employee = db.employees.find(e => e.id === employeeId);
-    if (!employee) return [];
+  const employee = db.employees.find((e) => e.id === employeeId);
+  if (!employee) return [];
 
-    const positionBasedIds = db.positionCourses
-        .filter(pc => pc.positionId === employee.positionId)
-        .map(pc => pc.courseId);
+  const positionBasedIds = db.positionCourses
+    .filter((pc) => pc.positionId === employee.positionId)
+    .map((pc) => pc.courseId);
 
-    const individualAssignedIds = db.employeeCourseAssignments
-        .filter(ac => ac.employeeId === employeeId)
-        .map(ac => ac.courseId);
-    
-    // Use a Set to ensure uniqueness
-    return [...new Set([...positionBasedIds, ...individualAssignedIds])];
+  const individualAssignedIds = db.employeeCourseAssignments
+    .filter((ac) => ac.employeeId === employeeId)
+    .map((ac) => ac.courseId);
+
+  // Use a Set to ensure uniqueness
+  return [...new Set([...positionBasedIds, ...individualAssignedIds])];
 }
 
 function getEmployeeFullDetailsById(id) {
-    const employee = db.employees.find(e => e.id === id);
-    if (!employee) return null;
+  const employee = db.employees.find((e) => e.id === id);
+  if (!employee) return null;
 
-    const position = db.positions.find(p => p.id === employee.positionId);
-    if (!position) return null;
+  const position = db.positions.find((p) => p.id === employee.positionId);
+  if (!position) return null;
 
-    const department = db.departments.find(d => d.id === position.departmentId);
-    if (!department) return null;
+  const department = db.departments.find((d) => d.id === position.departmentId);
+  if (!department) return null;
 
-    const trainingRecords = db.employeeTrainings.filter(t => t.employeeId === employee.id);
-    const requiredCourseIds = getRequiredCourseIdsForEmployee(employee.id);
-      
-    const requiredCourses = db.courses.filter(c => requiredCourseIds.includes(c.id));
+  const trainingRecords = db.employeeTrainings.filter((t) => t.employeeId === employee.id);
+  const requiredCourseIds = getRequiredCourseIdsForEmployee(employee.id);
 
-    const completedCount = requiredCourses.filter(rc => 
-        trainingRecords.some(tr => tr.courseId === rc.id)
-    ).length;
+  const requiredCourses = db.courses.filter((c) => requiredCourseIds.includes(c.id));
 
-    const completionPercentage = requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
+  const completedCount = requiredCourses.filter((rc) =>
+    trainingRecords.some((tr) => tr.courseId === rc.id)
+  ).length;
 
-    return {
-      ...employee,
-      position,
-      department,
-      trainingRecords,
-      requiredCourses,
-      completionPercentage,
-    };
+  const completionPercentage =
+    requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
+
+  return {
+    ...employee,
+    position,
+    department,
+    trainingRecords,
+    requiredCourses,
+    completionPercentage,
+  };
 }
-
 
 // --- API Endpoints ---
 
 // GET all basic employee info
 app.get('/api/employees', (req, res) => {
+  // Try database first, fall back to in-memory data
+  (async () => {
+    let knex;
+    try {
+      knex = createLocalPool();
+      const hasTable = await knex.schema.hasTable('employees');
+      if (hasTable) {
+        const rows = await knex.select('*').from('employees').limit(1000);
+        await knex.destroy();
+        return res.json(rows);
+      }
+    } catch (err) {
+      console.warn('DB employees query failed, falling back to static data:', err.message);
+      if (knex) await knex.destroy().catch(() => {});
+    }
     res.json(db.employees);
+  })();
 });
 
 // GET all detailed employee info
 app.get('/api/employees/details', (req, res) => {
-    const fullDetails = db.employees.map(emp => getEmployeeFullDetailsById(emp.id)).filter(e => e !== null);
-    res.json(fullDetails);
+  const fullDetails = db.employees
+    .map((emp) => getEmployeeFullDetailsById(emp.id))
+    .filter((e) => e !== null);
+  res.json(fullDetails);
 });
 
 // GET a single employee's detailed info
 app.get('/api/employees/:id/details', (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    const details = getEmployeeFullDetailsById(id);
-    if (details) {
-        res.json(details);
-    } else {
-        res.status(404).json({ message: 'Employee not found' });
-    }
+  const id = parseInt(req.params.id, 10);
+  const details = getEmployeeFullDetailsById(id);
+  if (details) {
+    res.json(details);
+  } else {
+    res.status(404).json({ message: 'Employee not found' });
+  }
 });
 
 // GET all courses for a specific employee
 app.get('/api/employees/:id/courses', (req, res) => {
-    const employeeId = parseInt(req.params.id, 10);
-    const employeeDetails = getEmployeeFullDetailsById(employeeId);
-    if (!employeeDetails) {
-        return res.status(404).json({ message: 'Employee not found' });
-    }
+  const employeeId = parseInt(req.params.id, 10);
+  const employeeDetails = getEmployeeFullDetailsById(employeeId);
+  if (!employeeDetails) {
+    return res.status(404).json({ message: 'Employee not found' });
+  }
 
-    const employeeCourses = employeeDetails.requiredCourses.map(course => {
-        const trainingRecord = employeeDetails.trainingRecords.find(tr => tr.courseId === course.id);
-        return {
-          ...course,
-          completionDate: trainingRecord ? trainingRecord.completionDate : null,
-          status: trainingRecord ? 'Completed' : 'Pending'
-        };
-    });
-    res.json(employeeCourses);
+  const employeeCourses = employeeDetails.requiredCourses.map((course) => {
+    const trainingRecord = employeeDetails.trainingRecords.find((tr) => tr.courseId === course.id);
+    return {
+      ...course,
+      completionDate: trainingRecord ? trainingRecord.completionDate : null,
+      status: trainingRecord ? 'Completed' : 'Pending',
+    };
+  });
+  res.json(employeeCourses);
 });
 
 // GET all courses
 app.get('/api/courses', (req, res) => {
+  (async () => {
+    let knex;
+    try {
+      knex = createLocalPool();
+      const hasTable = await knex.schema.hasTable('courses');
+      if (hasTable) {
+        const rows = await knex.select('*').from('courses').limit(1000);
+        await knex.destroy();
+        return res.json(rows);
+      }
+    } catch (err) {
+      console.warn('DB courses query failed, falling back to static data:', err.message);
+      if (knex) await knex.destroy().catch(() => {});
+    }
     res.json(db.courses);
+  })();
 });
 
 // GET all positions
 app.get('/api/positions', (req, res) => {
+  (async () => {
+    let knex;
+    try {
+      knex = createLocalPool();
+      const hasTable = await knex.schema.hasTable('positions');
+      if (hasTable) {
+        const rows = await knex.select('*').from('positions').limit(1000);
+        await knex.destroy();
+        return res.json(rows);
+      }
+    } catch (err) {
+      console.warn('DB positions query failed, falling back to static data:', err.message);
+      if (knex) await knex.destroy().catch(() => {});
+    }
     res.json(db.positions);
+  })();
 });
 
 // GET all employees assigned to a course
 app.get('/api/courses/:id/employees', (req, res) => {
-    const courseId = parseInt(req.params.id, 10);
+  const courseId = parseInt(req.params.id, 10);
 
-    // Find all positions that require this course
-    const requiredPositionIds = db.positionCourses
-        .filter(pc => pc.courseId === courseId)
-        .map(pc => pc.positionId);
-    
-    const positionBasedEmployees = db.employees.filter(emp => requiredPositionIds.includes(emp.positionId));
+  // Find all positions that require this course
+  const requiredPositionIds = db.positionCourses
+    .filter((pc) => pc.courseId === courseId)
+    .map((pc) => pc.positionId);
 
-    // Find all employees individually assigned this course
-    const individualAssignedEmployeeIds = db.employeeCourseAssignments
-        .filter(ac => ac.courseId === courseId)
-        .map(ac => ac.employeeId);
+  const positionBasedEmployees = db.employees.filter((emp) =>
+    requiredPositionIds.includes(emp.positionId)
+  );
 
-    const individualEmployees = db.employees.filter(emp => individualAssignedEmployeeIds.includes(emp.id));
+  // Find all employees individually assigned this course
+  const individualAssignedEmployeeIds = db.employeeCourseAssignments
+    .filter((ac) => ac.courseId === courseId)
+    .map((ac) => ac.employeeId);
 
-    // Combine and deduplicate
-    const allEmployees = [...positionBasedEmployees, ...individualEmployees];
-    const uniqueEmployees = Array.from(new Set(allEmployees.map(e => e.id)))
-        .map(id => allEmployees.find(e => e.id === id));
+  const individualEmployees = db.employees.filter((emp) =>
+    individualAssignedEmployeeIds.includes(emp.id)
+  );
 
-    res.json(uniqueEmployees);
+  // Combine and deduplicate
+  const allEmployees = [...positionBasedEmployees, ...individualEmployees];
+  const uniqueEmployees = Array.from(new Set(allEmployees.map((e) => e.id))).map((id) =>
+    allEmployees.find((e) => e.id === id)
+  );
+
+  res.json(uniqueEmployees);
 });
 
 // GET all position IDs for a course
 app.get('/api/courses/:id/positions', (req, res) => {
-    const courseId = parseInt(req.params.id, 10);
-    const positionIds = db.positionCourses
-        .filter(pc => pc.courseId === courseId)
-        .map(pc => pc.positionId);
-    res.json(positionIds);
+  const courseId = parseInt(req.params.id, 10);
+  const positionIds = db.positionCourses
+    .filter((pc) => pc.courseId === courseId)
+    .map((pc) => pc.positionId);
+  res.json(positionIds);
 });
 
 // POST: Assign a course to positions
 app.post('/api/assignments/positions', (req, res) => {
-    const { courseId, positionIds } = req.body;
-    if (!courseId || !Array.isArray(positionIds)) {
-        return res.status(400).json({ message: 'Invalid request body' });
+  const { courseId, positionIds } = req.body;
+  if (!courseId || !Array.isArray(positionIds)) {
+    return res.status(400).json({ message: 'Invalid request body' });
+  }
+
+  positionIds.forEach((positionId) => {
+    const exists = db.positionCourses.some(
+      (pc) => pc.courseId === courseId && pc.positionId === positionId
+    );
+    if (!exists) {
+      db.positionCourses.push({ courseId, positionId });
     }
+  });
 
-    positionIds.forEach(positionId => {
-        const exists = db.positionCourses.some(pc => pc.courseId === courseId && pc.positionId === positionId);
-        if (!exists) {
-            db.positionCourses.push({ courseId, positionId });
-        }
-    });
-
-    res.status(201).json({ message: 'Assignments created successfully' });
+  res.status(201).json({ message: 'Assignments created successfully' });
 });
 
 // POST: Assign a course to employees
 app.post('/api/assignments/employees', (req, res) => {
-    const { courseId, employeeIds } = req.body;
-    if (!courseId || !Array.isArray(employeeIds)) {
-        return res.status(400).json({ message: 'Invalid request body' });
-    }
+  const { courseId, employeeIds } = req.body;
+  if (!courseId || !Array.isArray(employeeIds)) {
+    return res.status(400).json({ message: 'Invalid request body' });
+  }
 
-    employeeIds.forEach(employeeId => {
-        const exists = db.employeeCourseAssignments.some(ac => ac.courseId === courseId && ac.employeeId === employeeId);
-        if (!exists) {
-            db.employeeCourseAssignments.push({ courseId, employeeId });
-        }
-    });
-    
-    res.status(201).json({ message: 'Assignments created successfully' });
+  employeeIds.forEach((employeeId) => {
+    const exists = db.employeeCourseAssignments.some(
+      (ac) => ac.courseId === courseId && ac.employeeId === employeeId
+    );
+    if (!exists) {
+      db.employeeCourseAssignments.push({ courseId, employeeId });
+    }
+  });
+
+  res.status(201).json({ message: 'Assignments created successfully' });
 });
 
 // POST: Analyze training data with Gemini
 app.post('/api/analyze-training', async (req, res) => {
-    const { prompt } = req.body;
-    if (!prompt) {
-        return res.status(400).json({ message: 'Prompt is required' });
-    }
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ message: 'Prompt is required' });
+  }
 
-    if (!process.env.API_KEY) {
-        return res.status(500).json({ message: 'API_KEY environment variable not set on the server. Please create a .env file in the /backend directory with your API key.' });
-    }
+  if (!process.env.API_KEY) {
+    return res
+      .status(500)
+      .json({
+        message:
+          'API_KEY environment variable not set on the server. Please create a .env file in the /backend directory with your API key.',
+      });
+  }
 
-    try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
-        res.json({ analysis: response.text });
-    } catch (error) {
-        console.error('Gemini API error:', error);
-        res.status(500).json({ message: 'Failed to generate analysis from the Gemini API.' });
-    }
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+    res.json({ analysis: response.text });
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    res.status(500).json({ message: 'Failed to generate analysis from the Gemini API.' });
+  }
 });
 
 app.listen(port, () => {
-    console.log(`HR Training Tracker backend listening at http://localhost:${port}`);
+  console.log(`HR Training Tracker backend listening at http://localhost:${port}`);
+});
+
+// Simple endpoint to test DB connectivity explicitly
+app.get('/api/test-db', async (req, res) => {
+  let knex;
+  try {
+    knex = createLocalPool();
+    const result = await knex.raw('SELECT 1 + 1 AS result');
+    // mysql2/Knex returns rows in result[0] for raw queries
+    const value = Array.isArray(result) && result[0] && result[0][0] ? result[0][0].result : null;
+    await knex.destroy();
+    return res.json({ ok: true, result: value });
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    console.error('Database connection error:', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });

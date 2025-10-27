@@ -1,4 +1,6 @@
 
+drop database hr_tracking_db;
+create database hr_tracking_db;
 -- ===================================================
 -- HR TRAINING TRACKER DATABASE
 -- ===================================================
