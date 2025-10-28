@@ -300,11 +300,11 @@ const createLocalPool = (config = {}) => {
 
 module.exports = {
   createLocalPool,
-  departments,
-  positions,
-  employees,
-  courses,
-  positionCourses,
-  employeeCourseAssignments,
-  employeeTrainings,
+  // departments,
+  // positions,
+  // employees,
+  // courses,
+  // positionCourses,
+  // employeeCourseAssignments,
+  // employeeTrainings,
 };

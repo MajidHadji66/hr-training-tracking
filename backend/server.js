@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
-const { createLocalPool } = require('./db');
 
 const app = express();
 const port = 3000;
@@ -85,41 +84,127 @@ app.get('/api/employees', (req, res) => {
 });
 
 // GET all detailed employee info
-app.get('/api/employees/details', (req, res) => {
-  const fullDetails = db.employees
-    .map((emp) => getEmployeeFullDetailsById(emp.id))
-    .filter((e) => e !== null);
-  res.json(fullDetails);
+const { createLocalPool } = require('./db');
+
+app.get('/api/employees/details', async (req, res) => {
+  let knex;
+  try {
+    knex = db.createLocalPool();
+    // Get all employees
+    const employees = await knex.select('*').from('employees');
+    // console.log('DB employees:', employees);
+    // Get all positions
+    const positions = await knex.select('*').from('positions');
+    // Get all departments
+    const departments = await knex.select('*').from('departments');
+    // Get all trainings
+    const trainings = await knex.select('*').from('employeetrainings');
+    // Get all courses
+    const courses = await knex.select('*').from('courses');
+
+    // Build full details for each employee
+    const fullDetails = employees.map((emp) => {
+      const position = positions.find((p) => p.id === emp.positionId) || null;
+      const department = position ? departments.find((d) => d.id === position.departmentId) : null;
+      const trainingRecords = trainings.filter((t) => t.employeeId === emp.id);
+      // Find required courses for this employee
+      // For now, just assign all courses (customize as needed)
+      const requiredCourses = courses;
+      const completedCount = requiredCourses.filter((rc) =>
+        trainingRecords.some((tr) => tr.courseId === rc.id)
+      ).length;
+      const completionPercentage =
+        requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
+      return {
+        ...emp,
+        position,
+        department,
+        trainingRecords,
+        requiredCourses,
+        completionPercentage,
+      };
+    });
+    await knex.destroy();
+    res.json(fullDetails);
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    // console.error('Error in /api/employees/details:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET a single employee's detailed info
-app.get('/api/employees/:id/details', (req, res) => {
+app.get('/api/employees/:id/details', async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const details = getEmployeeFullDetailsById(id);
-  if (details) {
+  let knex;
+  try {
+    knex = db.createLocalPool();
+    // Get the employee
+    const employees = await knex('employees').where({ id });
+    if (!employees.length) {
+      await knex.destroy();
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    const emp = employees[0];
+    // Get all positions
+    const positions = await knex.select('*').from('positions');
+    // Get all departments
+    const departments = await knex.select('*').from('departments');
+    // Get all trainings for this employee
+    const trainings = await knex('employeetrainings').where({ employeeId: id });
+    // Get all courses
+    const courses = await knex.select('*').from('courses');
+
+    const position = positions.find((p) => p.id === emp.positionId) || null;
+    const department = position ? departments.find((d) => d.id === position.departmentId) : null;
+    // For now, just assign all courses (customize as needed)
+    const requiredCourses = courses;
+    const completedCount = requiredCourses.filter((rc) =>
+      trainings.some((tr) => tr.courseId === rc.id)
+    ).length;
+    const completionPercentage =
+      requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
+    const details = {
+      ...emp,
+      position,
+      department,
+      trainingRecords: trainings,
+      requiredCourses,
+      completionPercentage,
+    };
+    await knex.destroy();
     res.json(details);
-  } else {
-    res.status(404).json({ message: 'Employee not found' });
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: err.message });
   }
 });
 
 // GET all courses for a specific employee
-app.get('/api/employees/:id/courses', (req, res) => {
+app.get('/api/employees/:id/courses', async (req, res) => {
   const employeeId = parseInt(req.params.id, 10);
-  const employeeDetails = getEmployeeFullDetailsById(employeeId);
-  if (!employeeDetails) {
-    return res.status(404).json({ message: 'Employee not found' });
+  let knex;
+  try {
+    knex = db.createLocalPool();
+    // Get all courses
+    const courses = await knex.select('*').from('courses');
+    // Get all trainings for this employee
+    const trainings = await knex('employeetrainings').where({ employeeId });
+    // For now, just assign all courses (customize as needed)
+    const employeeCourses = courses.map((course) => {
+      const trainingRecord = trainings.find((tr) => tr.courseId === course.id);
+      return {
+        ...course,
+        completionDate: trainingRecord ? trainingRecord.completionDate : null,
+        status: trainingRecord ? 'Completed' : 'Pending',
+      };
+    });
+    await knex.destroy();
+    res.json(employeeCourses);
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: err.message });
   }
-
-  const employeeCourses = employeeDetails.requiredCourses.map((course) => {
-    const trainingRecord = employeeDetails.trainingRecords.find((tr) => tr.courseId === course.id);
-    return {
-      ...course,
-      completionDate: trainingRecord ? trainingRecord.completionDate : null,
-      status: trainingRecord ? 'Completed' : 'Pending',
-    };
-  });
-  res.json(employeeCourses);
 });
 
 // GET all courses
@@ -163,43 +248,62 @@ app.get('/api/positions', (req, res) => {
 });
 
 // GET all employees assigned to a course
-app.get('/api/courses/:id/employees', (req, res) => {
+app.get('/api/courses/:id/employees', async (req, res) => {
   const courseId = parseInt(req.params.id, 10);
+  let knex;
+  try {
+    knex = db.createLocalPool();
+    // Find all positions that require this course
+    const positionCourseRows = await knex('positioncourses').where({ courseId });
+    const requiredPositionIds = positionCourseRows.map((pc) => pc.positionId);
 
-  // Find all positions that require this course
-  const requiredPositionIds = db.positionCourses
-    .filter((pc) => pc.courseId === courseId)
-    .map((pc) => pc.positionId);
+    // Find all employees with those positions
+    let positionBasedEmployees = [];
+    if (requiredPositionIds.length) {
+      positionBasedEmployees = await knex('employees').whereIn('positionId', requiredPositionIds);
+    }
 
-  const positionBasedEmployees = db.employees.filter((emp) =>
-    requiredPositionIds.includes(emp.positionId)
-  );
+    // Find all employees individually assigned this course
+    // If you have a table for individual assignments, update the table name below
+    let individualAssignedEmployeeIds = [];
+    if (await knex.schema.hasTable('employeecourseassignments')) {
+      const assignmentRows = await knex('employeecourseassignments').where({ courseId });
+      individualAssignedEmployeeIds = assignmentRows.map((ac) => ac.employeeId);
+    }
+    let individualEmployees = [];
+    if (individualAssignedEmployeeIds.length) {
+      individualEmployees = await knex('employees').whereIn('id', individualAssignedEmployeeIds);
+    }
 
-  // Find all employees individually assigned this course
-  const individualAssignedEmployeeIds = db.employeeCourseAssignments
-    .filter((ac) => ac.courseId === courseId)
-    .map((ac) => ac.employeeId);
+    // Combine and deduplicate
+    const allEmployees = [...positionBasedEmployees, ...individualEmployees];
+    const uniqueEmployees = Array.from(new Set(allEmployees.map((e) => e.id))).map((id) =>
+      allEmployees.find((e) => e.id === id)
+    );
 
-  const individualEmployees = db.employees.filter((emp) =>
-    individualAssignedEmployeeIds.includes(emp.id)
-  );
-
-  // Combine and deduplicate
-  const allEmployees = [...positionBasedEmployees, ...individualEmployees];
-  const uniqueEmployees = Array.from(new Set(allEmployees.map((e) => e.id))).map((id) =>
-    allEmployees.find((e) => e.id === id)
-  );
-
-  res.json(uniqueEmployees);
+    await knex.destroy();
+    res.json(uniqueEmployees);
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET all position IDs for a course
-app.get('/api/courses/:id/positions', (req, res) => {
+app.get('/api/courses/:id/positions', async (req, res) => {
   const courseId = parseInt(req.params.id, 10);
-  const positionIds = db.positionCourses
-    .filter((pc) => pc.courseId === courseId)
-    .map((pc) => pc.positionId);
-  res.json(positionIds);
+  let knex;
+  try {
+    knex = db.createLocalPool();
+    // Replace 'positioncourses' with your actual table name if different
+    const rows = await knex('positioncourses').where({ courseId });
+    const positionIds = rows.map((pc) => pc.positionId);
+    await knex.destroy();
+    res.json(positionIds);
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST: Assign a course to positions
@@ -248,12 +352,10 @@ app.post('/api/analyze-training', async (req, res) => {
   }
 
   if (!process.env.API_KEY) {
-    return res
-      .status(500)
-      .json({
-        message:
-          'API_KEY environment variable not set on the server. Please create a .env file in the /backend directory with your API key.',
-      });
+    return res.status(500).json({
+      message:
+        'API_KEY environment variable not set on the server. Please create a .env file in the /backend directory with your API key.',
+    });
   }
 
   try {
