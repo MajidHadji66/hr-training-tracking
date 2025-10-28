@@ -31,7 +31,7 @@
     </mat-card-header>
     <mat-card-content class="!p-0">
       <mat-list>
-        @for (course of courses(); track course.id) {
+        @for (course of getRequiredCoursesWithStatus(); track course.id) {
         <mat-list-item>
           <div matListItemTitle class="!font-semibold text-gray-800">{{ course.name }}</div>
           <div matListItemLine class="!text-sm !text-gray-500">{{ course.description }}</div>

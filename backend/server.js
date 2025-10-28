@@ -1,3 +1,4 @@
+// ...existing code...
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -5,6 +6,34 @@ const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
 
 const app = express();
+// DEBUG: Show mapping of positions to required courses
+app.get('/api/debug/position-courses', async (req, res) => {
+  let knex;
+  try {
+    knex = require('./db').createLocalPool();
+    const positions = await knex.select('*').from('positions');
+    const courses = await knex.select('*').from('courses');
+    const positionCourses = await knex.select('*').from('positioncourses');
+    // Build mapping
+    const mapping = positions.map((pos) => {
+      const requiredCourseIds = positionCourses
+        .filter((pc) => pc.positionId === pos.id)
+        .map((pc) => pc.courseId);
+      const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
+      return {
+        positionId: pos.id,
+        positionName: pos.name || pos.title || '',
+        requiredCourseIds,
+        requiredCourses: requiredCourses.map((c) => ({ id: c.id, name: c.name || c.title || '' })),
+      };
+    });
+    await knex.destroy();
+    res.json(mapping);
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: err.message });
+  }
+});
 const port = 3000;
 
 app.use(cors());
@@ -26,38 +55,6 @@ function getRequiredCourseIdsForEmployee(employeeId) {
 
   // Use a Set to ensure uniqueness
   return [...new Set([...positionBasedIds, ...individualAssignedIds])];
-}
-
-function getEmployeeFullDetailsById(id) {
-  const employee = db.employees.find((e) => e.id === id);
-  if (!employee) return null;
-
-  const position = db.positions.find((p) => p.id === employee.positionId);
-  if (!position) return null;
-
-  const department = db.departments.find((d) => d.id === position.departmentId);
-  if (!department) return null;
-
-  const trainingRecords = db.employeeTrainings.filter((t) => t.employeeId === employee.id);
-  const requiredCourseIds = getRequiredCourseIdsForEmployee(employee.id);
-
-  const requiredCourses = db.courses.filter((c) => requiredCourseIds.includes(c.id));
-
-  const completedCount = requiredCourses.filter((rc) =>
-    trainingRecords.some((tr) => tr.courseId === rc.id)
-  ).length;
-
-  const completionPercentage =
-    requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
-
-  return {
-    ...employee,
-    position,
-    department,
-    trainingRecords,
-    requiredCourses,
-    completionPercentage,
-  };
 }
 
 // --- API Endpoints ---
@@ -103,27 +100,35 @@ app.get('/api/employees/details', async (req, res) => {
     const courses = await knex.select('*').from('courses');
 
     // Build full details for each employee
-    const fullDetails = employees.map((emp) => {
-      const position = positions.find((p) => p.id === emp.positionId) || null;
-      const department = position ? departments.find((d) => d.id === position.departmentId) : null;
-      const trainingRecords = trainings.filter((t) => t.employeeId === emp.id);
-      // Find required courses for this employee
-      // For now, just assign all courses (customize as needed)
-      const requiredCourses = courses;
-      const completedCount = requiredCourses.filter((rc) =>
-        trainingRecords.some((tr) => tr.courseId === rc.id)
-      ).length;
-      const completionPercentage =
-        requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
-      return {
-        ...emp,
-        position,
-        department,
-        trainingRecords,
-        requiredCourses,
-        completionPercentage,
-      };
-    });
+    const fullDetails = await Promise.all(
+      employees.map(async (emp) => {
+        const position = positions.find((p) => p.id === emp.positionId) || null;
+        const department = position
+          ? departments.find((d) => d.id === position.departmentId)
+          : null;
+        const trainingRecords = trainings.filter((t) => t.employeeId === emp.id);
+        // Find required courses for this employee
+        // Only use position-based required courses
+        const positionCourseRows = await knex('positioncourses').where({
+          positionId: emp.positionId,
+        });
+        const requiredCourseIds = positionCourseRows.map((pc) => pc.courseId);
+        const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
+        const completedCount = requiredCourses.filter((rc) =>
+          trainingRecords.some((tr) => tr.courseId === rc.id)
+        ).length;
+        const completionPercentage =
+          requiredCourses.length > 0 ? (completedCount / requiredCourses.length) * 100 : 100;
+        return {
+          ...emp,
+          position,
+          department,
+          trainingRecords,
+          requiredCourses,
+          completionPercentage,
+        };
+      })
+    );
     await knex.destroy();
     res.json(fullDetails);
   } catch (err) {
@@ -157,8 +162,10 @@ app.get('/api/employees/:id/details', async (req, res) => {
 
     const position = positions.find((p) => p.id === emp.positionId) || null;
     const department = position ? departments.find((d) => d.id === position.departmentId) : null;
-    // For now, just assign all courses (customize as needed)
-    const requiredCourses = courses;
+    // Only use position-based required courses
+    const positionCourseRows = await knex('positioncourses').where({ positionId: emp.positionId });
+    const requiredCourseIds = positionCourseRows.map((pc) => pc.courseId);
+    const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
     const completedCount = requiredCourses.filter((rc) =>
       trainings.some((tr) => tr.courseId === rc.id)
     ).length;

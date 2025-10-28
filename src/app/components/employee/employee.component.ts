@@ -26,6 +26,19 @@ import { filter, switchMap, of } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EmployeeComponent {
+  // Helper to merge requiredCourses and trainingRecords for display
+  getRequiredCoursesWithStatus() {
+    const emp = this.employee();
+    if (!emp) return [];
+    return emp.requiredCourses.map((course) => {
+      const record = emp.trainingRecords.find((tr) => tr.courseId === course.id);
+      return {
+        ...course,
+        status: record ? 'Completed' : 'Pending',
+        completionDate: record ? record.completionDate : null,
+      };
+    });
+  }
   private readonly dataService = inject(DataService);
 
   id = input.required<string>();
