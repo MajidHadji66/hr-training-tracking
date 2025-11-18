@@ -1,13 +1,16 @@
 <div class="min-h-screen bg-gray-100 text-gray-800 flex flex-col">
-  <mat-toolbar color="primary" class="shadow-md sticky top-0 z-50">
-    <a routerLink="/" class="text-2xl font-bold !text-black no-underline"> HR Training Tracker </a>
+  <mat-toolbar color="primary" class="shadow-md sticky top-0 z-50 flex items-center justify-between">
+    <a routerLink="/" class="text-2xl font-bold !text-white no-underline">HR Training Tracker</a>
+    <span class="flex-1"></span>
+    <span class="text-base font-medium !text-white">Professional Development Hub</span>
   </mat-toolbar>
   <main class="container mx-auto p-6 flex-grow">
     <router-outlet></router-outlet>
   </main>
   <footer class="bg-white py-4 border-t border-gray-200">
     <div class="container mx-auto text-center">
-      <p class="text-sm text-gray-600">Created by Majid Hadji &copy; {{ currentYear }}</p>
+      <mat-divider></mat-divider>
+      <p class="text-sm text-gray-600 mt-4">Created by Majid Hadji &copy; {{ currentYear }}</p>
     </div>
   </footer>
 </div>
