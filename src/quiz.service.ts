@@ -55,6 +55,18 @@ export class QuizService {
       question: 'What are the two main user views in the application?',
       answer: 'Admin Dashboard (for managing all employees and training) and Employee Portal (for viewing personal training)',
       category: 'System Features'
+    },
+    {
+      id: 9,
+      question: 'Why is continuous employee training important?',
+      answer: 'It ensures employees stay current with industry standards, improves job performance, increases engagement, and helps organizations remain competitive.',
+      category: 'Best Practices'
+    },
+    {
+      id: 10,
+      question: 'What role does training tracking play in compliance?',
+      answer: 'It provides documented proof that employees have completed required certifications and training, which is essential for regulatory compliance and audits.',
+      category: 'Compliance'
     }
   ];
 
