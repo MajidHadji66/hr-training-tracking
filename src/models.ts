@@ -55,10 +55,3 @@ export interface EmployeeCourse extends Course {
 export interface CourseWithAssignments extends Course {
   assignedEmployees: Employee[];
 }
-
-export interface QuizQuestion {
-  id: number;
-  question: string;
-  answer: string;
-  category?: string;
-}
