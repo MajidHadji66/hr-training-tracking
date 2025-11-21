@@ -93,6 +93,7 @@ ng e2e
 
 - ✅ Employee, Position, and Department management  
 - ✅ Course creation and enrollment tracking  
+- ✅ **Flashcard Quiz System** - Interactive flashcards for testing knowledge with random question selection
 - ✅ REST API backend with Node.js + Express  
 - 🔄 Search and filtering functionality  
 - 🧠 NgRx Signal Store for reactive state management  
@@ -107,6 +108,21 @@ ng e2e
 - **Database:** MySQL / Cloud SQL (planned)  
 - **Build Tool:** Angular CLI  
 - **Testing:** Jasmine, Karma  
+
+---
+
+## 🎴 Flashcard Quiz Feature
+
+The application now includes an interactive flashcard quiz system! This feature allows users to test their knowledge with randomly selected questions.
+
+**Key Features:**
+- Random question selection from a pool of questions
+- Beautiful flip animation to reveal answers
+- Category-based organization
+- Progress tracking
+- Reset functionality
+
+For detailed information about using and customizing the flashcard feature, see [FLASHCARD_README.md](./FLASHCARD_README.md).
 
 ---
 
