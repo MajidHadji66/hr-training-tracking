@@ -77,12 +77,22 @@ export class QuizService {
   }
 
   getRandomQuestion(): Observable<QuizQuestion | null> {
+    // Check if question pool is empty
+    if (this.quizQuestions.length === 0) {
+      return of(null);
+    }
+
     const availableQuestions = this.quizQuestions.filter(q => !this.usedQuestionIds.has(q.id));
     
     if (availableQuestions.length === 0) {
-      // Reset if all questions have been used
+      // Reset if all questions have been used and try again
       this.usedQuestionIds.clear();
-      return this.getRandomQuestion();
+      // After clearing, all questions are available again
+      const allQuestions = [...this.quizQuestions];
+      const randomIndex = Math.floor(Math.random() * allQuestions.length);
+      const selectedQuestion = allQuestions[randomIndex];
+      this.usedQuestionIds.add(selectedQuestion.id);
+      return of(selectedQuestion);
     }
 
     const randomIndex = Math.floor(Math.random() * availableQuestions.length);
@@ -102,7 +112,7 @@ export class QuizService {
   }
 
   getCategories(): Observable<string[]> {
-    const categories = [...new Set(this.quizQuestions.map(q => q.category).filter(c => c !== undefined))];
-    return of(categories as string[]);
+    const categories = [...new Set(this.quizQuestions.map(q => q.category).filter((c): c is string => c !== undefined))];
+    return of(categories);
   }
 }
