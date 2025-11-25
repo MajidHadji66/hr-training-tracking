@@ -29,11 +29,23 @@ export class EmployeeComponent {
   // Helper to merge requiredCourses and trainingRecords for display
   getRequiredCoursesWithStatus() {
     const emp = this.employee();
-    if (!emp) return [];
-    return emp.requiredCourses.map((course) => {
-      const record = emp.trainingRecords.find((tr) => tr.courseId === course.id);
+    if (!emp || !emp.requiredCourses) return [];
+    // Debug: log requiredCourses and trainingRecords
+    console.log('DEBUG requiredCourses:', emp.requiredCourses);
+    console.log('DEBUG trainingRecords:', emp.trainingRecords);
+    // Deduplicate required courses by ID
+    const uniqueCourses = Object.values(
+      emp.requiredCourses.reduce((acc, course) => {
+        acc[course.id] = course;
+        return acc;
+      }, {} as Record<string, (typeof emp.requiredCourses)[0]>)
+    );
+    return uniqueCourses.map((course) => {
+      const record = emp.trainingRecords?.find((tr) => tr.courseId === course.id);
       return {
-        ...course,
+        id: course.id,
+        name: course.name || 'Untitled Course',
+        description: course.description || '',
         status: record ? 'Completed' : 'Pending',
         completionDate: record ? record.completionDate : null,
       };

@@ -13,10 +13,10 @@ app.get('/api/debug/position-courses', async (req, res) => {
     knex = require('./db').createLocalPool();
     const positions = await knex.select('*').from('positions');
     const courses = await knex.select('*').from('courses');
-    const positionCourses = await knex.select('*').from('positioncourses');
+    const positioncourses = await knex.select('*').from('positioncourses');
     // Build mapping
     const mapping = positions.map((pos) => {
-      const requiredCourseIds = positionCourses
+      const requiredCourseIds = positioncourses
         .filter((pc) => pc.positionId === pos.id)
         .map((pc) => pc.courseId);
       const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
@@ -45,11 +45,11 @@ function getRequiredCourseIdsForEmployee(employeeId) {
   const employee = db.employees.find((e) => e.id === employeeId);
   if (!employee) return [];
 
-  const positionBasedIds = db.positionCourses
+  const positionBasedIds = db.positioncourses
     .filter((pc) => pc.positionId === employee.positionId)
     .map((pc) => pc.courseId);
 
-  const individualAssignedIds = db.employeeCourseAssignments
+  const individualAssignedIds = db.employeetrainings
     .filter((ac) => ac.employeeId === employeeId)
     .map((ac) => ac.courseId);
 
@@ -109,11 +109,20 @@ app.get('/api/employees/details', async (req, res) => {
         const trainingRecords = trainings.filter((t) => t.employeeId === emp.id);
         // Find required courses for this employee
         // Only use position-based required courses
+        // Position-based required courses
         const positionCourseRows = await knex('positioncourses').where({
           positionId: emp.positionId,
         });
-        const requiredCourseIds = positionCourseRows.map((pc) => pc.courseId);
-        const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
+        const positionCourseIds = positionCourseRows.map((pc) => pc.courseId);
+
+        // Individually assigned courses (from employeetrainings)
+        const individualCourseIds = trainingRecords.map((tr) => tr.courseId);
+
+        // Combine and deduplicate course IDs
+        const allRequiredCourseIds = Array.from(
+          new Set([...positionCourseIds, ...individualCourseIds])
+        );
+        const requiredCourses = courses.filter((c) => allRequiredCourseIds.includes(c.id));
         const completedCount = requiredCourses.filter((rc) =>
           trainingRecords.some((tr) => tr.courseId === rc.id)
         ).length;
@@ -162,10 +171,18 @@ app.get('/api/employees/:id/details', async (req, res) => {
 
     const position = positions.find((p) => p.id === emp.positionId) || null;
     const department = position ? departments.find((d) => d.id === position.departmentId) : null;
-    // Only use position-based required courses
+    // Position-based required courses
     const positionCourseRows = await knex('positioncourses').where({ positionId: emp.positionId });
-    const requiredCourseIds = positionCourseRows.map((pc) => pc.courseId);
-    const requiredCourses = courses.filter((c) => requiredCourseIds.includes(c.id));
+    const positionCourseIds = positionCourseRows.map((pc) => pc.courseId);
+
+    // Individually assigned courses (from employeetrainings)
+    const individualCourseIds = trainings.map((tr) => tr.courseId);
+
+    // Combine and deduplicate course IDs
+    const allRequiredCourseIds = Array.from(
+      new Set([...positionCourseIds, ...individualCourseIds])
+    );
+    const requiredCourses = courses.filter((c) => allRequiredCourseIds.includes(c.id));
     const completedCount = requiredCourses.filter((rc) =>
       trainings.some((tr) => tr.courseId === rc.id)
     ).length;
@@ -314,41 +331,93 @@ app.get('/api/courses/:id/positions', async (req, res) => {
 });
 
 // POST: Assign a course to positions
-app.post('/api/assignments/positions', (req, res) => {
+app.post('/api/assignments/positions', async (req, res) => {
   const { courseId, positionIds } = req.body;
   if (!courseId || !Array.isArray(positionIds)) {
     return res.status(400).json({ message: 'Invalid request body' });
   }
-
-  positionIds.forEach((positionId) => {
-    const exists = db.positionCourses.some(
-      (pc) => pc.courseId === courseId && pc.positionId === positionId
-    );
-    if (!exists) {
-      db.positionCourses.push({ courseId, positionId });
+  let knex;
+  try {
+    knex = createLocalPool();
+    for (const positionId of positionIds) {
+      const exists = await knex('positioncourses').where({ courseId, positionId }).first();
+      if (!exists) {
+        await knex('positioncourses').insert({ courseId, positionId });
+      }
     }
-  });
-
-  res.status(201).json({ message: 'Assignments created successfully' });
+    await knex.destroy();
+    res.status(201).json({ message: 'Assignments created successfully' });
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: 'Database error', details: err.message });
+  }
+  // Duplicate function removed
+  // app.post('/api/assignments/positions', async (req, res) => {
+  //   const { courseId, positionIds } = req.body;
+  //   if (!courseId || !Array.isArray(positionIds)) {
+  //     return res.status(400).json({ message: 'Invalid request body' });
+  //   }
+  //   let knex;
+  //   try {
+  //     knex = createLocalPool();
+  //     for (const positionId of positionIds) {
+  //       const exists = await knex('positioncourses').where({ courseId, positionId }).first();
+  //       if (!exists) {
+  //         await knex('positioncourses').insert({ courseId, positionId });
+  //       }
+  //     }
+  //     await knex.destroy();
+  //     res.status(201).json({ message: 'Assignments created successfully' });
+  //   } catch (err) {
+  //     if (knex) await knex.destroy().catch(() => {});
+  //     res.status(500).json({ error: 'Database error', details: err.message });
+  //   }
+  // });
 });
 
 // POST: Assign a course to employees
-app.post('/api/assignments/employees', (req, res) => {
+app.post('/api/assignments/employeetrainings', async (req, res) => {
   const { courseId, employeeIds } = req.body;
   if (!courseId || !Array.isArray(employeeIds)) {
     return res.status(400).json({ message: 'Invalid request body' });
   }
-
-  employeeIds.forEach((employeeId) => {
-    const exists = db.employeeCourseAssignments.some(
-      (ac) => ac.courseId === courseId && ac.employeeId === employeeId
-    );
-    if (!exists) {
-      db.employeeCourseAssignments.push({ courseId, employeeId });
+  let knex;
+  try {
+    knex = createLocalPool();
+    for (const employeeId of employeeIds) {
+      const exists = await knex('employeetrainings').where({ courseId, employeeId }).first();
+      if (!exists) {
+        await knex('employeetrainings').insert({ courseId, employeeId });
+      }
     }
-  });
-
-  res.status(201).json({ message: 'Assignments created successfully' });
+    await knex.destroy();
+    res.status(201).json({ message: 'Assignments created successfully' });
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: 'Database error', details: err.message });
+  }
+  // Duplicate function removed
+  // app.post('/api/assignments/employees', async (req, res) => {
+  //   const { courseId, employeeIds } = req.body;
+  //   if (!courseId || !Array.isArray(employeeIds)) {
+  //     return res.status(400).json({ message: 'Invalid request body' });
+  //   }
+  //   let knex;
+  //   try {
+  //     knex = createLocalPool();
+  //     for (const employeeId of employeeIds) {
+  //       const exists = await knex('employeetrainings').where({ courseId, employeeId }).first();
+  //       if (!exists) {
+  //         await knex('employeetrainings').insert({ courseId, employeeId });
+  //       }
+  //     }
+  //     await knex.destroy();
+  //     res.status(201).json({ message: 'Assignments created successfully' });
+  //   } catch (err) {
+  //     if (knex) await knex.destroy().catch(() => {});
+  //     res.status(500).json({ error: 'Database error', details: err.message });
+  //   }
+  // });
 });
 
 // POST: Analyze training data with Gemini
