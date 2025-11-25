@@ -10,6 +10,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { filter, switchMap, of } from 'rxjs';
+import { CommonModule, DatePipe } from '@angular/common';
 
 @Component({
   selector: 'app-employee',
@@ -22,6 +23,8 @@ import { filter, switchMap, of } from 'rxjs';
     MatButtonModule,
     MatProgressSpinnerModule,
     MatIconModule,
+    DatePipe,
+    CommonModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,9 +33,7 @@ export class EmployeeComponent {
   getRequiredCoursesWithStatus() {
     const emp = this.employee();
     if (!emp || !emp.requiredCourses) return [];
-    // Debug: log requiredCourses and trainingRecords
-    console.log('DEBUG requiredCourses:', emp.requiredCourses);
-    console.log('DEBUG trainingRecords:', emp.trainingRecords);
+
     // Deduplicate required courses by ID
     const uniqueCourses = Object.values(
       emp.requiredCourses.reduce((acc, course) => {
@@ -46,7 +47,7 @@ export class EmployeeComponent {
         id: course.id,
         name: course.name || 'Untitled Course',
         description: course.description || '',
-        status: record ? 'Completed' : 'Pending',
+        status: record?.completionDate ? 'Completed' : 'Pending',
         completionDate: record ? record.completionDate : null,
       };
     });

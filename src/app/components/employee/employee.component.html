@@ -32,9 +32,15 @@
     <mat-card-content class="!p-0">
       <mat-list>
         @for (course of getRequiredCoursesWithStatus(); track course.id) {
+        <div class="matListItemLine w-full mt-2 flex items-center gap-2 !text-sm !text-gray-500">
+          @if (course.status === 'Completed') {
+          <span>Completed on {{ course.completionDate | date : 'mediumDate' }}</span>
+          }
+        </div>
         <mat-list-item>
           <div matListItemTitle class="!font-semibold text-gray-800">{{ course.name }}</div>
           <div matListItemLine class="!text-sm !text-gray-500">{{ course.description }}</div>
+
           <div matListItemMeta>
             @if (course.status === 'Completed') {
             <div class="text-right">
@@ -43,7 +49,6 @@
               >
                 Completed
               </span>
-              <p class="text-xs text-gray-500 mt-1">{{ course.completionDate }}</p>
             </div>
             } @else {
             <span

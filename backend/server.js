@@ -1,4 +1,3 @@
-// ...existing code...
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -6,7 +5,6 @@ const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
 
 const app = express();
-// DEBUG: Show mapping of positions to required courses
 app.get('/api/debug/position-courses', async (req, res) => {
   let knex;
   try {
@@ -108,7 +106,6 @@ app.get('/api/employees/details', async (req, res) => {
           : null;
         const trainingRecords = trainings.filter((t) => t.employeeId === emp.id);
         // Find required courses for this employee
-        // Only use position-based required courses
         // Position-based required courses
         const positionCourseRows = await knex('positioncourses').where({
           positionId: emp.positionId,
@@ -351,28 +348,6 @@ app.post('/api/assignments/positions', async (req, res) => {
     if (knex) await knex.destroy().catch(() => {});
     res.status(500).json({ error: 'Database error', details: err.message });
   }
-  // Duplicate function removed
-  // app.post('/api/assignments/positions', async (req, res) => {
-  //   const { courseId, positionIds } = req.body;
-  //   if (!courseId || !Array.isArray(positionIds)) {
-  //     return res.status(400).json({ message: 'Invalid request body' });
-  //   }
-  //   let knex;
-  //   try {
-  //     knex = createLocalPool();
-  //     for (const positionId of positionIds) {
-  //       const exists = await knex('positioncourses').where({ courseId, positionId }).first();
-  //       if (!exists) {
-  //         await knex('positioncourses').insert({ courseId, positionId });
-  //       }
-  //     }
-  //     await knex.destroy();
-  //     res.status(201).json({ message: 'Assignments created successfully' });
-  //   } catch (err) {
-  //     if (knex) await knex.destroy().catch(() => {});
-  //     res.status(500).json({ error: 'Database error', details: err.message });
-  //   }
-  // });
 });
 
 // POST: Assign a course to employees
@@ -396,28 +371,6 @@ app.post('/api/assignments/employeetrainings', async (req, res) => {
     if (knex) await knex.destroy().catch(() => {});
     res.status(500).json({ error: 'Database error', details: err.message });
   }
-  // Duplicate function removed
-  // app.post('/api/assignments/employees', async (req, res) => {
-  //   const { courseId, employeeIds } = req.body;
-  //   if (!courseId || !Array.isArray(employeeIds)) {
-  //     return res.status(400).json({ message: 'Invalid request body' });
-  //   }
-  //   let knex;
-  //   try {
-  //     knex = createLocalPool();
-  //     for (const employeeId of employeeIds) {
-  //       const exists = await knex('employeetrainings').where({ courseId, employeeId }).first();
-  //       if (!exists) {
-  //         await knex('employeetrainings').insert({ courseId, employeeId });
-  //       }
-  //     }
-  //     await knex.destroy();
-  //     res.status(201).json({ message: 'Assignments created successfully' });
-  //   } catch (err) {
-  //     if (knex) await knex.destroy().catch(() => {});
-  //     res.status(500).json({ error: 'Database error', details: err.message });
-  //   }
-  // });
 });
 
 // POST: Analyze training data with Gemini
