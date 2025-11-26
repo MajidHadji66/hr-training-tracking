@@ -1,5 +1,7 @@
 // FIX: Add signal to imports from @angular/core
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmCompleteDialogComponent } from './confirm-complete-dialog.component';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { DataService } from '../../../data.service';
@@ -25,10 +27,36 @@ import { CommonModule, DatePipe } from '@angular/common';
     MatIconModule,
     DatePipe,
     CommonModule,
+    MatDialogModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EmployeeComponent {
+  private dialog = inject(MatDialog);
+
+  openConfirmDialog(course: any): void {
+    const dialogRef = this.dialog.open(ConfirmCompleteDialogComponent);
+    dialogRef.afterClosed().subscribe((result: boolean) => {
+      if (result) {
+        this.completeCourse(course);
+      }
+    });
+  }
+
+  completeCourse(course: any): void {
+    const emp = this.employee();
+    if (!emp) return;
+    const completionDate = new Date().toISOString();
+    this.dataService.markCourseCompleted(emp.id, course.id, completionDate).subscribe({
+      next: (res) => {
+        console.log('Course marked as completed:', res);
+        // Optionally refresh data or show a success message
+      },
+      error: (err) => {
+        console.error('Error marking course as completed:', err);
+      },
+    });
+  }
   // Helper to merge requiredCourses and trainingRecords for display
   getRequiredCoursesWithStatus() {
     const emp = this.employee();

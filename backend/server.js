@@ -373,50 +373,32 @@ app.post('/api/assignments/employeetrainings', async (req, res) => {
   }
 });
 
-// POST: Analyze training data with Gemini
-app.post('/api/analyze-training', async (req, res) => {
-  const { prompt } = req.body;
-  if (!prompt) {
-    return res.status(400).json({ message: 'Prompt is required' });
+// PUT: Upsert (insert if not exists, update if exists) for marking a course as completed for an employee
+app.put('/api/employeetrainings', async (req, res) => {
+  const { employeeId, courseId, completionDate } = req.body;
+  if (!employeeId || !courseId || !completionDate) {
+    return res.status(400).json({ message: 'Missing required fields' });
   }
-
-  if (!process.env.API_KEY) {
-    return res.status(500).json({
-      message:
-        'API_KEY environment variable not set on the server. Please create a .env file in the /backend directory with your API key.',
-    });
-  }
-
+  let knex;
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    res.json({ analysis: response.text });
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    res.status(500).json({ message: 'Failed to generate analysis from the Gemini API.' });
+    knex = createLocalPool();
+    const exists = await knex('employeetrainings').where({ employeeId, courseId }).first();
+    console.log('exists:', exists);
+    if (exists) {
+      await knex('employeetrainings').where({ employeeId, courseId }).update({ completionDate });
+      await knex.destroy();
+      return res.json({ message: 'Training marked as completed (updated)' });
+    } else {
+      await knex('employeetrainings').insert({ employeeId, courseId, completionDate });
+      await knex.destroy();
+      return res.json({ message: 'Training marked as completed (inserted)' });
+    }
+  } catch (err) {
+    if (knex) await knex.destroy().catch(() => {});
+    res.status(500).json({ error: 'Database error', details: err.message });
   }
 });
 
 app.listen(port, () => {
-  console.log(`HR Training Tracker backend listening at http://localhost:${port}`);
-});
-
-// Simple endpoint to test DB connectivity explicitly
-app.get('/api/test-db', async (req, res) => {
-  let knex;
-  try {
-    knex = createLocalPool();
-    const result = await knex.raw('SELECT 1 + 1 AS result');
-    // mysql2/Knex returns rows in result[0] for raw queries
-    const value = Array.isArray(result) && result[0] && result[0][0] ? result[0][0].result : null;
-    await knex.destroy();
-    return res.json({ ok: true, result: value });
-  } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
-    console.error('Database connection error:', err);
-    return res.status(500).json({ ok: false, error: err.message });
-  }
+  console.log(`Server running at http://localhost:${port}`);
 });

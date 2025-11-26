@@ -19,6 +19,16 @@ export class DataService {
     };
   }
 
+  markCourseCompleted(
+    employeeId: number,
+    courseId: number,
+    completionDate: string
+  ): Observable<any> {
+    return this.http
+      .put(`${this.apiUrl}/employeetrainings`, { employeeId, courseId, completionDate })
+      .pipe(catchError(this.handleError<any>('markCourseCompleted')));
+  }
+
   getAllEmployees(): Observable<Employee[]> {
     return this.http
       .get<Employee[]>(`${this.apiUrl}/employees`)

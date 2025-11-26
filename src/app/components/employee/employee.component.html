@@ -34,8 +34,7 @@
         @for (course of getRequiredCoursesWithStatus(); track course.id) {
         <div class="matListItemLine w-full mt-2 flex items-center gap-2 !text-sm !text-gray-500">
           @if (course.status === 'Completed') {
-          <span>Completed on {{ course.completionDate | date : 'mediumDate' }}</span>
-          }
+          <span>Completed on {{ course.completionDate | date : 'mediumDate' }}</span> }
         </div>
         <mat-list-item>
           <div matListItemTitle class="!font-semibold text-gray-800">{{ course.name }}</div>
@@ -51,11 +50,14 @@
               </span>
             </div>
             } @else {
-            <span
-              class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800"
+            <button
+              mat-raised-button
+              color="accent"
+              class="px-3 py-1 text-sm font-medium bg-yellow-100 text-yellow-800"
+              (click)="openConfirmDialog(course)"
             >
               Pending
-            </span>
+            </button>
             }
           </div>
         </mat-list-item>
