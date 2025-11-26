@@ -12,6 +12,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { filter, switchMap, of } from 'rxjs';
+import { combineLatest } from 'rxjs';
 import { CommonModule, DatePipe } from '@angular/common';
 
 @Component({
@@ -33,6 +34,8 @@ import { CommonModule, DatePipe } from '@angular/common';
 })
 export class EmployeeComponent {
   private dialog = inject(MatDialog);
+  // Used to trigger reloads
+  private reloadSignal = signal(0);
 
   openConfirmDialog(course: any): void {
     const dialogRef = this.dialog.open(ConfirmCompleteDialogComponent);
@@ -46,11 +49,19 @@ export class EmployeeComponent {
   completeCourse(course: any): void {
     const emp = this.employee();
     if (!emp) return;
-    const completionDate = new Date().toISOString();
+    // Format completionDate as 'YYYY-MM-DD'
+    const now = new Date();
+    const completionDate =
+      now.getFullYear() +
+      '-' +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(now.getDate()).padStart(2, '0');
     this.dataService.markCourseCompleted(emp.id, course.id, completionDate).subscribe({
       next: (res) => {
         console.log('Course marked as completed:', res);
-        // Optionally refresh data or show a success message
+        // Trigger reload to update UI
+        this.reloadSignal.update((v) => v + 1);
       },
       error: (err) => {
         console.error('Error marking course as completed:', err);
@@ -64,13 +75,13 @@ export class EmployeeComponent {
 
     // Deduplicate required courses by ID
     const uniqueCourses = Object.values(
-      emp.requiredCourses.reduce((acc, course) => {
+      emp.requiredCourses.reduce((acc: Record<number, any>, course: any) => {
         acc[course.id] = course;
         return acc;
-      }, {} as Record<string, (typeof emp.requiredCourses)[0]>)
+      }, {} as Record<number, any>)
     );
-    return uniqueCourses.map((course) => {
-      const record = emp.trainingRecords?.find((tr) => tr.courseId === course.id);
+    return uniqueCourses.map((course: any) => {
+      const record = emp.trainingRecords?.find((tr: any) => tr.courseId === course.id);
       return {
         id: course.id,
         name: course.name || 'Untitled Course',
@@ -84,28 +95,30 @@ export class EmployeeComponent {
 
   id = input.required<string>();
 
-  // Reactive stream that fetches data when the employee ID changes
-  private employeeData$ = toObservable(this.id).pipe(
-    filter((id) => !!id),
-    // FIX: Explicitly type `id` as string to resolve type inference issue with `parseInt`.
-    switchMap((id: string) => {
+  // Reactive stream that fetches data when the employee ID changes or reload is triggered
+  private employeeData$ = combineLatest([
+    toObservable(this.id).pipe(filter((id) => !!id)),
+    toObservable(this.reloadSignal),
+  ]).pipe(
+    switchMap(([id]) => {
       const employeeId = parseInt(id, 10);
       if (!isNaN(employeeId)) {
         return this.dataService.getEmployeeFullDetailsById(employeeId);
       }
-      return of(null); // Return an observable of null if ID is invalid
+      return of(null);
     })
   );
 
-  private courseData$ = toObservable(this.id).pipe(
-    filter((id) => !!id),
-    // FIX: Explicitly type `id` as string to resolve type inference issue with `parseInt`.
-    switchMap((id: string) => {
+  private courseData$ = combineLatest([
+    toObservable(this.id).pipe(filter((id) => !!id)),
+    toObservable(this.reloadSignal),
+  ]).pipe(
+    switchMap(([id]) => {
       const employeeId = parseInt(id, 10);
       if (!isNaN(employeeId)) {
         return this.dataService.getEmployeeCourses(employeeId);
       }
-      return of([]); // Return an observable of empty array
+      return of([]);
     })
   );
 
@@ -118,7 +131,12 @@ export class EmployeeComponent {
   analysisError = signal('');
 
   analyzeTraining(): void {
-    const emp = this.employee();
+    const emp = this.employee() as {
+      firstName?: string;
+      lastName?: string;
+      position?: { title?: string };
+      department?: { name?: string };
+    };
     if (!emp) {
       this.analysisError.set('Cannot analyze training without employee data.');
       return;
@@ -128,7 +146,7 @@ export class EmployeeComponent {
     this.analysisError.set('');
     this.analysisResult.set('');
 
-    const trainingStatusText = this.courses()
+    const trainingStatusText = (this.courses() as Array<{ name?: string; status?: string }>)
       .map((course) => `- ${course.name}: ${course.status}`)
       .join('\n');
 
@@ -141,9 +159,9 @@ export class EmployeeComponent {
       If any courses are pending, list them clearly in a bulleted list using <ul> and <li> tags within the main <p> tag.
       Conclude with an encouraging sentence.
 
-      Employee Name: ${emp.firstName} ${emp.lastName}
-      Position: ${emp.position.title}
-      Department: ${emp.department.name}
+      Employee Name: ${emp.firstName ?? ''} ${emp.lastName ?? ''}
+      Position: ${emp.position?.title ?? ''}
+      Department: ${emp.department?.name ?? ''}
 
       Training Status:
       ${trainingStatusText}
