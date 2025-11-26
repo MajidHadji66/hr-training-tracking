@@ -376,6 +376,7 @@ app.post('/api/assignments/employeetrainings', async (req, res) => {
 // PUT: Upsert (insert if not exists, update if exists) for marking a course as completed for an employee
 app.put('/api/employeetrainings', async (req, res) => {
   const { employeeId, courseId, completionDate } = req.body;
+  console.log('Received PUT /api/employeetrainings with body:', req.body);
   if (!employeeId || !courseId || !completionDate) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
