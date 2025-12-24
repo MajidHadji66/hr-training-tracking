@@ -1,10 +1,11 @@
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI } = require('@google/genai');
 const db = require('./db');
 
 const app = express();
+
 app.get('/api/debug/position-courses', async (req, res) => {
   let knex;
   try {
@@ -28,7 +29,7 @@ app.get('/api/debug/position-courses', async (req, res) => {
     await knex.destroy();
     res.json(mapping);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: err.message });
   }
 });
@@ -72,7 +73,7 @@ app.get('/api/employees', (req, res) => {
       }
     } catch (err) {
       console.warn('DB employees query failed, falling back to static data:', err.message);
-      if (knex) await knex.destroy().catch(() => {});
+      if (knex) await knex.destroy().catch(() => { });
     }
     res.json(db.employees);
   })();
@@ -138,7 +139,7 @@ app.get('/api/employees/details', async (req, res) => {
     await knex.destroy();
     res.json(fullDetails);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     // console.error('Error in /api/employees/details:', err);
     res.status(500).json({ error: err.message });
   }
@@ -196,7 +197,7 @@ app.get('/api/employees/:id/details', async (req, res) => {
     await knex.destroy();
     res.json(details);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: err.message });
   }
 });
@@ -223,7 +224,7 @@ app.get('/api/employees/:id/courses', async (req, res) => {
     await knex.destroy();
     res.json(employeeCourses);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: err.message });
   }
 });
@@ -242,7 +243,7 @@ app.get('/api/courses', (req, res) => {
       }
     } catch (err) {
       console.warn('DB courses query failed, falling back to static data:', err.message);
-      if (knex) await knex.destroy().catch(() => {});
+      if (knex) await knex.destroy().catch(() => { });
     }
     res.json(db.courses);
   })();
@@ -262,7 +263,7 @@ app.get('/api/positions', (req, res) => {
       }
     } catch (err) {
       console.warn('DB positions query failed, falling back to static data:', err.message);
-      if (knex) await knex.destroy().catch(() => {});
+      if (knex) await knex.destroy().catch(() => { });
     }
     res.json(db.positions);
   })();
@@ -305,7 +306,7 @@ app.get('/api/courses/:id/employees', async (req, res) => {
     await knex.destroy();
     res.json(uniqueEmployees);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: err.message });
   }
 });
@@ -322,7 +323,7 @@ app.get('/api/courses/:id/positions', async (req, res) => {
     await knex.destroy();
     res.json(positionIds);
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: err.message });
   }
 });
@@ -345,7 +346,7 @@ app.post('/api/assignments/positions', async (req, res) => {
     await knex.destroy();
     res.status(201).json({ message: 'Assignments created successfully' });
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: 'Database error', details: err.message });
   }
 });
@@ -368,7 +369,7 @@ app.post('/api/assignments/employeetrainings', async (req, res) => {
     await knex.destroy();
     res.status(201).json({ message: 'Assignments created successfully' });
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: 'Database error', details: err.message });
   }
 });
@@ -395,8 +396,33 @@ app.put('/api/employeetrainings', async (req, res) => {
       return res.json({ message: 'Training marked as completed (inserted)' });
     }
   } catch (err) {
-    if (knex) await knex.destroy().catch(() => {});
+    if (knex) await knex.destroy().catch(() => { });
     res.status(500).json({ error: 'Database error', details: err.message });
+  }
+});
+
+// POST: Analyze employee training using Gemini
+app.post('/api/analyze-training', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ error: 'No prompt provided' });
+    }
+
+    // Initialize legacy SDK
+    const apiKey = process.env.API_key || process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error('API Key not found');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    res.json({ analysis: text });
+  } catch (err) {
+    console.error('Error during AI analysis:', err);
+    res.status(500).json({ error: 'AI Analysis failed', details: err.message });
   }
 });
 
